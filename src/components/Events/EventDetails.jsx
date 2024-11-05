@@ -1,38 +1,58 @@
-import { Link, Outlet, useParams } from 'react-router-dom';
+import { Link, Outlet, useNavigate, useParams } from 'react-router-dom';
 
 import Header from '../Header.jsx';
-import { useQuery } from '@tanstack/react-query';
-import { fetchEvent } from '../../utils/http.js';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { deleteEvent, fetchEvent, queryClient } from '../../utils/http.js';
 import LoadingIndicator from '../UI/LoadingIndicator.jsx';
 import ErrorBlock from '../UI/ErrorBlock.jsx';
 
 export default function EventDetails() {
-  const { id } = useParams();
+  const navigate = useNavigate();
 
-  console.log(id);
+  const { id } = useParams();
 
   const {
     data: event,
-    isPending,
-    isError,
-    error,
+    isPending: isPendingEvent,
+    isError: isErrorEvent,
+    error: eventError,
   } = useQuery({
-    queryKey: ['event'],
-    queryFn: () => fetchEvent({ id }),
+    queryKey: ['events', id],
+    queryFn: ({ signal }) => fetchEvent({ id, signal }),
   });
 
-  if (isPending) {
+  const { mutate: deleteEv } = useMutation({
+    mutationFn: deleteEvent,
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['events'],
+      });
+      navigate('/events');
+    },
+  });
+
+  function handleDelete() {
+    deleteEv({ id });
+  }
+
+  if (isPendingEvent) {
     <LoadingIndicator />;
   }
 
-  if (isError) {
-    <ErrorBlock
-      title='An error occurred'
-      message={error.info?.message || 'Failed to fetch event'}
-    />;
+  if (isErrorEvent) {
+    <div id='event-details-content' className='center'>
+      <ErrorBlock
+        title='An error occurred'
+        message={eventError.info?.message || 'Failed to fetch event'}
+      />
+    </div>;
   }
 
-  console.log(event);
+  const formattedDate = new Date(event?.date).toLocaleDateString('en-US', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 
   return (
     <>
@@ -47,7 +67,7 @@ export default function EventDetails() {
           <header>
             <h1>{event.title}</h1>
             <nav>
-              <button>Delete</button>
+              <button onClick={handleDelete}>Delete</button>
               <Link to='edit'>Edit</Link>
             </nav>
           </header>
@@ -60,7 +80,7 @@ export default function EventDetails() {
               <div>
                 <p id='event-details-location'> {event.location}</p>
                 <time dateTime={`Todo-DateT$Todo-Time`}>
-                  {event.date} at {event.time}
+                  {formattedDate} @ {event.time}
                 </time>
               </div>
               <p id='event-details-description'>{event.description}</p>
